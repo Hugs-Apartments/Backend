@@ -47,7 +47,7 @@ export const config = {
     email: process.env.BUSINESS_EMAIL ?? 'stay@hugsapartments.ng',
     whatsapp: process.env.BUSINESS_WHATSAPP ?? '+234 909 215 7050',
     phone: process.env.BUSINESS_PHONE ?? '+234 909 215 7050',
-    address: process.env.BUSINESS_ADDRESS ?? '45 Dokun Ogundipe Crescent, Maryland, Lagos, Nigeria',
+    address: process.env.BUSINESS_ADDRESS ?? 'No. 45 Dokun Ogundipe Crescent, Maryland, Ikeja, Lagos, Nigeria',
     instagram: process.env.BUSINESS_INSTAGRAM ?? 'https://www.instagram.com/hugsluxuryapartments',
   },
 

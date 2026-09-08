@@ -60,8 +60,76 @@ export const submitFeedback = asyncHandler(async (req, res) => {
       .eq('id', bookingId)
   }
 
+  // Thank the guest for taking the time — "thank you for the feedback, hope to
+  // see you soon". Best-effort: the notifier never throws, and a mail hiccup
+  // must not fail the guest's submission.
+  if (input.email) {
+    let propertyName = null
+    if (propertyId) {
+      const { data: prop } = await supabaseAdmin
+        .from('properties')
+        .select('name')
+        .eq('id', propertyId)
+        .maybeSingle()
+      propertyName = prop?.name ?? null
+    }
+    await sendFeedbackThankYou({
+      name: input.name,
+      email: input.email,
+      rating: input.rating,
+      comment: input.comment?.trim() || '',
+      reference: input.reference?.trim() || '',
+      propertyName,
+    })
+  }
+
   logger.info('feedback.submitted', { feedbackId: data.id, rating: data.rating })
   res.status(201).json({ ok: true, feedback: data })
+})
+
+// ---------------------------------------------------------------------------
+// Public: GET /api/feedback/highlights — recent genuine 5-star reviews that
+// carry a written comment, shaped for the homepage testimonials. Guest names
+// are abbreviated to first name + last initial for privacy, and emails are
+// never exposed. Returns an empty list until real 5-star feedback exists, so
+// the homepage section simply hides rather than showing invented reviews.
+// ---------------------------------------------------------------------------
+
+// "Adaeze Okafor" -> "Adaeze O." ; single or joined names ("Tunde",
+// "Chioma & David") are left readable as-is.
+function abbreviateName(full) {
+  const name = (full ?? '').trim()
+  if (!name) return 'Guest'
+  const parts = name.split(/\s+/)
+  if (parts.length === 1 || parts.includes('&')) return name
+  const last = parts[parts.length - 1]
+  return `${parts[0]} ${last[0].toUpperCase()}.`
+}
+
+export const listFeedbackHighlights = asyncHandler(async (req, res) => {
+  const limit = Math.min(Math.max(Number(req.query.limit) || 6, 1), 12)
+
+  const { data, error } = await supabaseAdmin
+    .from('feedback')
+    .select('id, guest_name, rating, comment, created_at, property:properties(name, area, location)')
+    .eq('rating', 5)
+    .not('comment', 'is', null)
+    .order('created_at', { ascending: false })
+    .limit(50)
+  if (error) throw error
+
+  const testimonials = (data ?? [])
+    .filter((f) => (f.comment ?? '').trim().length >= 12)
+    .slice(0, limit)
+    .map((f) => ({
+      id: f.id,
+      name: abbreviateName(f.guest_name),
+      location: f.property?.area || f.property?.location || 'Maryland, Lagos',
+      rating: f.rating,
+      text: f.comment.trim(),
+    }))
+
+  res.json({ testimonials })
 })
 
 // ---------------------------------------------------------------------------

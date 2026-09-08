@@ -12,12 +12,13 @@ import {
   createBlock,
   deleteBlock,
 } from '../controllers/blockedDatesController.js'
-import { requireAdminAuth } from '../middleware/requireAdminAuth.js'
+import { requireAdminAuth, attachAdminIfPresent } from '../middleware/requireAdminAuth.js'
 
 const router = Router()
 
-// Public reads
-router.get('/', listProperties)
+// Public reads. `list` uses optional auth so an admin with a token can pass
+// ?all=true to include inactive listings; anonymous callers see active only.
+router.get('/', attachAdminIfPresent, listProperties)
 router.get('/:id', getProperty)
 router.get('/:id/availability', getAvailability)
 

@@ -13,6 +13,7 @@
  *   { action: 'subscribe',         token, email, name }
  *   { action: 'contact',           token, business, contact }
  *   { action: 'feedback_request',  token, business, guest, booking, feedback_url }
+ *   { action: 'feedback_thanks',   token, business, guest, feedback }
  *
  * booking_confirmed  -> emails the guest a branded HTML message with a PDF
  *                       receipt attached, and BCCs the business inbox.
@@ -22,6 +23,8 @@
  *                       sender) and sends the sender an acknowledgement copy.
  * feedback_request   -> emails the guest a thank-you after checkout with a link
  *                       to leave feedback.
+ * feedback_thanks    -> emails the guest a thank-you right after they submit
+ *                       feedback ("thank you — hope to see you soon").
  */
 
 // ---- Configuration -------------------------------------------------------
@@ -57,6 +60,8 @@ function doPost(e) {
         return json(handleContact(body, cfg));
       case 'feedback_request':
         return json(handleFeedbackRequest(body, cfg));
+      case 'feedback_thanks':
+        return json(handleFeedbackThanks(body, cfg));
       default:
         return json({ ok: false, error: 'Unknown action: ' + body.action });
     }
@@ -329,6 +334,53 @@ function handleFeedbackRequest(body, cfg) {
   MailApp.sendEmail(guest.email, subject,
     'Hi ' + name + ', thank you for staying with ' + (business.name || 'us') + '. ' +
     'We would love your feedback' + (url ? ': ' + url : '.'),
+    { htmlBody: html, name: business.name || 'Hugs Luxury Apartments' });
+  return { ok: true };
+}
+
+// ---- Feedback thank-you (right after the guest submits feedback) ---------
+function handleFeedbackThanks(body, cfg) {
+  var guest = body.guest || {};
+  var fb = body.feedback || {};
+  var business = body.business || {};
+  if (!guest.email) return { ok: false, error: 'Missing guest email' };
+
+  var name = guest.name || 'there';
+  var subject = 'Thank you for your feedback — ' + (business.name || 'Hugs Luxury Apartments');
+
+  var rating = Number(fb.rating || 0);
+  var stars = '';
+  for (var i = 1; i <= 5; i++) {
+    stars += '<span style="color:' + (i <= rating ? cfg.brandGold : '#ddd') + ';font-size:22px;">&#9733;</span>';
+  }
+
+  var comment = (fb.comment || '').trim();
+  var commentBlock = comment
+    ? '<p style="margin:16px 0 6px;font-size:12px;color:#777;text-transform:uppercase;letter-spacing:1px;">Your note</p>' +
+      '<div style="background:#faf8f4;border-left:3px solid ' + cfg.brandGold + ';padding:12px 14px;font-size:14px;white-space:pre-wrap;">' +
+      esc(comment) + '</div>'
+    : '';
+
+  var html = '' +
+    '<div style="font-family:Arial,Helvetica,sans-serif;max-width:560px;margin:auto;color:#211122;">' +
+    '<div style="background:' + cfg.brandPlum + ';padding:28px 24px;border-radius:12px 12px 0 0;">' +
+    '<div style="color:#fff;font-size:22px;font-weight:bold;">' + esc(business.name || 'Hugs Luxury Apartments') + '</div>' +
+    '<div style="color:' + cfg.brandGold + ';font-size:11px;letter-spacing:2px;text-transform:uppercase;margin-top:4px;">Live Luxury. Feel at Home.</div>' +
+    '</div>' +
+    '<div style="border:1px solid #eee;border-top:none;border-radius:0 0 12px 12px;padding:24px;">' +
+    '<h2 style="color:' + cfg.brandPlum + ';margin:0 0 8px;">Thank you for your feedback</h2>' +
+    '<p style="color:#555;font-size:14px;">Hi ' + esc(name) + ', thank you for taking the time to share your experience' +
+    (fb.property_name ? ' at ' + esc(fb.property_name) : '') + '. ' +
+    'It means a great deal to us, and we hope to welcome you back soon.</p>' +
+    (rating ? '<div style="margin:12px 0;">' + stars + '</div>' : '') +
+    commentBlock +
+    (fb.reference ? '<p style="color:#888;font-size:12px;margin-top:20px;">Booking ref: ' + esc(fb.reference) + '</p>' : '') +
+    '<p style="color:#888;font-size:12px;margin-top:8px;">Warm regards,<br>' + esc(business.name || 'Hugs Luxury Apartments') + '<br>' +
+    esc(business.email || '') + ' · ' + esc(business.whatsapp || '') + '</p>' +
+    '</div></div>';
+
+  MailApp.sendEmail(guest.email, subject,
+    'Hi ' + name + ', thank you for your feedback. We hope to see you again soon.\n\n— ' + (business.name || 'Hugs Luxury Apartments'),
     { htmlBody: html, name: business.name || 'Hugs Luxury Apartments' });
   return { ok: true };
 }
