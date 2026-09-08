@@ -3,7 +3,7 @@ import { supabaseAdmin } from '../lib/supabaseAdmin.js'
 import { asyncHandler, httpError } from '../middleware/errorHandler.js'
 import { config } from '../config.js'
 import { logger } from '../lib/logger.js'
-import { sendFeedbackRequest } from '../lib/notifier.js'
+import { sendFeedbackRequest, sendFeedbackThankYou } from '../lib/notifier.js'
 
 // ---------------------------------------------------------------------------
 // Public: POST /api/feedback — a guest leaves a rating + comment after a stay.

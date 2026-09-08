@@ -69,3 +69,18 @@ export function sendFeedbackRequest({ name, email, reference, propertyName, feed
     feedback_url: feedbackUrl ?? '',
   })
 }
+
+// Thanks a guest right after they submit feedback — "thank you for the
+// feedback, hope to see you soon". Best-effort; never blocks the response.
+export function sendFeedbackThankYou({ name, email, rating, comment, reference, propertyName }) {
+  return post('feedback_thanks', {
+    business: config.business,
+    guest: { name: name ?? '', email },
+    feedback: {
+      rating: rating ?? null,
+      comment: comment ?? '',
+      reference: reference ?? '',
+      property_name: propertyName ?? '',
+    },
+  })
+}
