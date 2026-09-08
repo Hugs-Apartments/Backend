@@ -11,11 +11,17 @@
  * The backend POSTs JSON of the shape:
  *   { action: 'booking_confirmed', token, business, receipt, payment }
  *   { action: 'subscribe',         token, email, name }
+ *   { action: 'contact',           token, business, contact }
+ *   { action: 'feedback_request',  token, business, guest, booking, feedback_url }
  *
  * booking_confirmed  -> emails the guest a branded HTML message with a PDF
  *                       receipt attached, and BCCs the business inbox.
  * subscribe          -> appends the email to a "Subscribers" sheet and sends
  *                       a short welcome email.
+ * contact            -> emails the enquiry to the business inbox (reply-to the
+ *                       sender) and sends the sender an acknowledgement copy.
+ * feedback_request   -> emails the guest a thank-you after checkout with a link
+ *                       to leave feedback.
  */
 
 // ---- Configuration -------------------------------------------------------
@@ -47,6 +53,10 @@ function doPost(e) {
         return json(handleBookingConfirmed(body, cfg));
       case 'subscribe':
         return json(handleSubscribe(body, cfg));
+      case 'contact':
+        return json(handleContact(body, cfg));
+      case 'feedback_request':
+        return json(handleFeedbackRequest(body, cfg));
       default:
         return json({ ok: false, error: 'Unknown action: ' + body.action });
     }
@@ -126,6 +136,7 @@ function buildReceiptPdf(receipt, payment, business, cfg) {
     '<h2>Payment</h2><table>' +
     trow('Subtotal', money(charges.subtotal, currency)) +
     trow('Service fee', money(charges.service_fee, currency)) +
+    (charges.discount ? trow('Discount' + (charges.discount_code ? ' (' + esc(charges.discount_code) + ')' : ''), '-' + money(charges.discount, currency)) : '') +
     '<tr class="total"><td>Total paid</td><td class="r">' + money(charges.total, currency) + '</td></tr>' +
     '</table>' +
     '<table style="margin-top:10px;">' +
@@ -163,6 +174,7 @@ function buildEmailHtml(receipt, payment, business, cfg) {
     mrow('Check-in', fmtDate(stay.check_in)) +
     mrow('Check-out', fmtDate(stay.check_out)) +
     mrow('Guests', String(stay.guests || '')) +
+    (charges.discount ? mrow('Discount', '-' + money(charges.discount, currency)) : '') +
     mrow('Total paid', money(charges.total, currency)) +
     '</table>' +
     '<p style="color:#888;font-size:12px;margin-top:24px;">Need help? Reply to this email, or reach us at ' +
@@ -194,6 +206,130 @@ function handleSubscribe(body, cfg) {
   } catch (err) {
     // Non-fatal — the address is still recorded.
   }
+  return { ok: true };
+}
+
+// ---- Contact form -------------------------------------------------------
+function handleContact(body, cfg) {
+  var c = body.contact || {};
+  var business = body.business || {};
+  var name = (c.name || '').trim();
+  var email = (c.email || '').trim();
+  var phone = (c.phone || '').trim();
+  var message = (c.message || '').trim();
+
+  if (!email || email.indexOf('@') === -1 || !message) {
+    return { ok: false, error: 'Missing name, email or message' };
+  }
+
+  // 1) Notify the company so they can see and reply to the enquiry.
+  var to = business.email || '';
+  if (to) {
+    MailApp.sendEmail(to, 'New website enquiry from ' + (name || email), contactPlain(c), {
+      name: (business.name || 'Website') + ' — Contact form',
+      replyTo: email,
+      htmlBody: contactCompanyHtml(c, business, cfg),
+    });
+  }
+
+  // 2) Acknowledge the sender (best-effort — the company copy already went out).
+  try {
+    MailApp.sendEmail(email, 'We received your message — ' + (business.name || 'Hugs Luxury Apartments'),
+      'Hi ' + (name || 'there') + ',\n\nThanks for reaching out. Our team has received your message and will respond shortly.\n\n— ' + (business.name || 'Hugs Luxury Apartments'),
+      {
+        name: business.name || 'Hugs Luxury Apartments',
+        replyTo: business.email || undefined,
+        htmlBody: contactAckHtml(c, business, cfg),
+      });
+  } catch (err) {
+    // Non-fatal — the enquiry still reached the company.
+  }
+
+  return { ok: true };
+}
+
+function contactCompanyHtml(c, business, cfg) {
+  return '' +
+    '<div style="font-family:Arial,Helvetica,sans-serif;max-width:560px;margin:auto;color:#211122;">' +
+    '<div style="background:' + cfg.brandPlum + ';padding:20px 24px;border-radius:12px 12px 0 0;color:#fff;font-size:16px;font-weight:bold;">' +
+    'New enquiry — ' + esc(business.name || 'Website') + '</div>' +
+    '<div style="border:1px solid #eee;border-top:none;border-radius:0 0 12px 12px;padding:24px;">' +
+    '<table style="width:100%;font-size:14px;border-collapse:collapse;">' +
+    mrow('Name', esc(c.name || '—')) +
+    mrow('Email', esc(c.email || '—')) +
+    mrow('Phone', esc(c.phone || '—')) +
+    '</table>' +
+    '<p style="margin:16px 0 6px;font-size:12px;color:#777;text-transform:uppercase;letter-spacing:1px;">Message</p>' +
+    '<div style="background:#faf8f4;border-left:3px solid ' + cfg.brandGold + ';padding:12px 14px;font-size:14px;white-space:pre-wrap;">' +
+    esc(c.message || '') + '</div>' +
+    '<p style="color:#888;font-size:12px;margin-top:20px;">Reply directly to this email to respond to ' + esc(c.name || 'the guest') + '.</p>' +
+    '</div></div>';
+}
+
+function contactAckHtml(c, business, cfg) {
+  return '' +
+    '<div style="font-family:Arial,Helvetica,sans-serif;max-width:560px;margin:auto;color:#211122;">' +
+    '<div style="background:' + cfg.brandPlum + ';padding:28px 24px;border-radius:12px 12px 0 0;">' +
+    '<div style="color:#fff;font-size:22px;font-weight:bold;">' + esc(business.name || 'Hugs Luxury Apartments') + '</div>' +
+    '<div style="color:' + cfg.brandGold + ';font-size:11px;letter-spacing:2px;text-transform:uppercase;margin-top:4px;">Live Luxury. Feel at Home.</div>' +
+    '</div>' +
+    '<div style="border:1px solid #eee;border-top:none;border-radius:0 0 12px 12px;padding:24px;">' +
+    '<h2 style="color:' + cfg.brandPlum + ';margin:0 0 8px;">Thanks for reaching out</h2>' +
+    '<p style="color:#555;font-size:14px;">Hi ' + esc(c.name || 'there') + ', we\'ve received your message and our team will respond shortly. ' +
+    'Here\'s a copy for your records:</p>' +
+    '<div style="background:#faf8f4;border-left:3px solid ' + cfg.brandGold + ';padding:12px 14px;font-size:14px;white-space:pre-wrap;">' +
+    esc(c.message || '') + '</div>' +
+    '<p style="color:#888;font-size:12px;margin-top:20px;">Need us sooner? ' +
+    esc(business.email || '') + ' · ' + esc(business.whatsapp || '') + '.</p>' +
+    '</div></div>';
+}
+
+function contactPlain(c) {
+  return 'New website enquiry\n\n' +
+    'Name:  ' + (c.name || '—') + '\n' +
+    'Email: ' + (c.email || '—') + '\n' +
+    'Phone: ' + (c.phone || '—') + '\n\n' +
+    'Message:\n' + (c.message || '');
+}
+
+// ---- Feedback request (post-checkout) ------------------------------------
+function handleFeedbackRequest(body, cfg) {
+  var guest = body.guest || {};
+  var booking = body.booking || {};
+  var business = body.business || {};
+  var url = body.feedback_url || '';
+  if (!guest.email) return { ok: false, error: 'Missing guest email' };
+
+  var subject = 'How was your stay? — ' + (business.name || 'Hugs Luxury Apartments');
+  var name = guest.name || 'there';
+  var property = booking.property_name || 'your apartment';
+
+  var button = url
+    ? '<a href="' + esc(url) + '" style="background:' + cfg.brandGold + ';color:' + cfg.brandPlum +
+      ';display:inline-block;padding:12px 28px;border-radius:999px;font-weight:bold;font-size:14px;text-decoration:none;margin-top:8px;">Share your feedback</a>'
+    : '';
+
+  var html = '' +
+    '<div style="font-family:Arial,Helvetica,sans-serif;max-width:560px;margin:auto;color:#211122;">' +
+    '<div style="background:' + cfg.brandPlum + ';padding:28px 24px;border-radius:12px 12px 0 0;">' +
+    '<div style="color:#fff;font-size:22px;font-weight:bold;">' + esc(business.name || 'Hugs Luxury Apartments') + '</div>' +
+    '<div style="color:' + cfg.brandGold + ';font-size:11px;letter-spacing:2px;text-transform:uppercase;margin-top:4px;">Live Luxury. Feel at Home.</div>' +
+    '</div>' +
+    '<div style="border:1px solid #eee;border-top:none;border-radius:0 0 12px 12px;padding:24px;">' +
+    '<h2 style="color:' + cfg.brandPlum + ';margin:0 0 8px;">Thank you for staying with us</h2>' +
+    '<p style="color:#555;font-size:14px;">Hi ' + esc(name) + ', we hope you enjoyed ' + esc(property) + '. ' +
+    'Your experience matters to us — would you take a moment to tell us how it went? ' +
+    'It helps us keep improving.</p>' +
+    button +
+    (booking.reference ? '<p style="color:#888;font-size:12px;margin-top:20px;">Booking ref: ' + esc(booking.reference) + '</p>' : '') +
+    '<p style="color:#888;font-size:12px;margin-top:8px;">We hope to welcome you back soon. ' +
+    esc(business.email || '') + ' · ' + esc(business.whatsapp || '') + '.</p>' +
+    '</div></div>';
+
+  MailApp.sendEmail(guest.email, subject,
+    'Hi ' + name + ', thank you for staying with ' + (business.name || 'us') + '. ' +
+    'We would love your feedback' + (url ? ': ' + url : '.'),
+    { htmlBody: html, name: business.name || 'Hugs Luxury Apartments' });
   return { ok: true };
 }
 

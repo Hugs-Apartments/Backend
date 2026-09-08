@@ -45,8 +45,19 @@ export const config = {
   business: {
     name: process.env.BUSINESS_NAME ?? 'Hugs Luxury Apartments',
     email: process.env.BUSINESS_EMAIL ?? 'stay@hugsapartments.ng',
-    whatsapp: process.env.BUSINESS_WHATSAPP ?? '+234 800 000 0000',
+    whatsapp: process.env.BUSINESS_WHATSAPP ?? '+234 909 215 7050',
+    phone: process.env.BUSINESS_PHONE ?? '+234 909 215 7050',
+    address: process.env.BUSINESS_ADDRESS ?? '45 Dokun Ogundipe Crescent, Maryland, Lagos, Nigeria',
+    instagram: process.env.BUSINESS_INSTAGRAM ?? 'https://www.instagram.com/hugsluxuryapartments',
   },
+
+  // Public site URL, used to build guest-facing links (e.g. the post-stay
+  // feedback page). No trailing slash.
+  publicUrl: (process.env.PUBLIC_URL ?? process.env.FRONTEND_URL ?? '').replace(/\/$/, ''),
+
+  // Shared secret for scheduled jobs (e.g. the feedback-email dispatch). Vercel
+  // Cron sends this automatically as `Authorization: Bearer <CRON_SECRET>`.
+  cronSecret: process.env.CRON_SECRET ?? '',
 
   serviceFeeRate: Number(process.env.SERVICE_FEE_RATE ?? 0.05),
 }

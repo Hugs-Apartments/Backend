@@ -1,14 +1,18 @@
 import { supabaseAdmin } from '../lib/supabaseAdmin.js'
 
-// Gathers all occupied ranges for a property: active bookings (pending or
-// confirmed) plus manual admin blocks. Returns [{ start, end }].
+// Gathers all occupied ranges for a property: PAID bookings (status
+// 'completed') plus manual admin blocks. Returns [{ start, end }].
+//
+// Note: unpaid ('pending') bookings do NOT occupy dates — dates are never
+// held for an unpaid guest. Availability is decided by successful payment
+// (completed) or a deliberate admin block only.
 // `excludeBookingId` lets a booking ignore its own row when re-checking.
 export async function getOccupiedRanges(propertyId, excludeBookingId = null) {
   let bookingQ = supabaseAdmin
     .from('bookings')
     .select('id, check_in, check_out')
     .eq('property_id', propertyId)
-    .in('status', ['pending', 'confirmed'])
+    .eq('status', 'completed')
   if (excludeBookingId) bookingQ = bookingQ.neq('id', excludeBookingId)
 
   const [{ data: bookings, error: bErr }, { data: blocks, error: blErr }] = await Promise.all([

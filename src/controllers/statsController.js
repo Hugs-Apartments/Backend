@@ -24,7 +24,7 @@ export const getOverview = asyncHandler(async (req, res) => {
     supabaseAdmin
       .from('bookings')
       .select('id, reference, guest_name, check_in, check_out, property:properties(name)')
-      .eq('status', 'confirmed')
+      .eq('status', 'completed')
       .gte('check_in', todayISO)
       .order('check_in', { ascending: true })
       .limit(10),

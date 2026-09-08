@@ -70,9 +70,14 @@ create table if not exists bookings (
   nights         int not null,
   subtotal       numeric(12,2) not null,
   service_fee    numeric(12,2) not null default 0,
+  discount_code   text,
+  discount_amount numeric(12,2) not null default 0,
   total_amount   numeric(12,2) not null,
   status         booking_status not null default 'pending',
   payment_status payment_status not null default 'pending',
+  -- Post-stay feedback tracking (see feedback table + cron dispatch)
+  feedback_requested_at timestamptz,
+  feedback_submitted_at timestamptz,
   created_at     timestamptz not null default now(),
   updated_at     timestamptz not null default now(),
   check (check_out > check_in)
@@ -115,6 +120,56 @@ create table if not exists payments (
 create index if not exists idx_payments_booking on payments (booking_id);
 
 -- ---------------------------------------------------------------------------
+-- Newsletter subscribers
+-- ---------------------------------------------------------------------------
+create table if not exists subscribers (
+  id         uuid primary key default gen_random_uuid(),
+  email      text unique not null,
+  name       text,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists idx_subscribers_created on subscribers (created_at desc);
+
+-- ---------------------------------------------------------------------------
+-- Promo / discount codes (created by admins, applied at booking time)
+-- ---------------------------------------------------------------------------
+create table if not exists promo_codes (
+  id          uuid primary key default gen_random_uuid(),
+  code        text unique not null,                                    -- stored UPPERCASE
+  type        text not null default 'percent' check (type in ('percent', 'fixed')),
+  value       numeric(12,2) not null check (value >= 0),               -- percent: 0-100, fixed: ₦ off
+  active      boolean not null default true,
+  max_uses    int,                                                     -- null = unlimited
+  used_count  int not null default 0,
+  min_nights  int not null default 0,
+  starts_on   date,                                                    -- null = no start bound
+  expires_on  date,                                                    -- null = never expires
+  created_at  timestamptz not null default now(),
+  updated_at  timestamptz not null default now()
+);
+
+create index if not exists idx_promo_codes_active on promo_codes (active);
+
+-- ---------------------------------------------------------------------------
+-- Guest feedback (collected after checkout — does NOT change a listing's rating)
+-- ---------------------------------------------------------------------------
+create table if not exists feedback (
+  id          uuid primary key default gen_random_uuid(),
+  booking_id  uuid references bookings (id) on delete set null,
+  property_id uuid references properties (id) on delete set null,
+  reference   text,
+  guest_name  text not null,
+  guest_email text,
+  rating      int not null check (rating between 1 and 5),
+  comment     text,
+  created_at  timestamptz not null default now()
+);
+
+create index if not exists idx_feedback_property on feedback (property_id);
+create index if not exists idx_feedback_created on feedback (created_at desc);
+
+-- ---------------------------------------------------------------------------
 -- updated_at trigger
 -- ---------------------------------------------------------------------------
 create or replace function set_updated_at()
@@ -137,5 +192,10 @@ exception when duplicate_object then null; end $$;
 
 do $$ begin
   create trigger trg_payments_updated before update on payments
+    for each row execute function set_updated_at();
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  create trigger trg_promo_codes_updated before update on promo_codes
     for each row execute function set_updated_at();
 exception when duplicate_object then null; end $$;

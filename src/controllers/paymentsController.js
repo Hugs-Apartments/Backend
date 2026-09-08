@@ -10,13 +10,14 @@ import {
 import { sendBookingConfirmation } from '../lib/notifier.js'
 import { isRangeAvailable } from '../utils/availability.js'
 import { getOccupiedRanges } from '../utils/occupancy.js'
+import { incrementPromoUsage } from './discountsController.js'
 
 const initSchema = z.object({ booking_id: z.string().uuid() })
 
-// Marks a booking confirmed + records the payment. Idempotent: safe to call
+// Marks a booking completed + records the payment. Idempotent: safe to call
 // from both the webhook and the verify endpoint. A successful payment is the
 // single source of truth — no manual admin confirmation is needed. On the
-// first transition to confirmed we email the guest a PDF receipt.
+// first transition to completed we email the guest a PDF receipt.
 async function confirmBookingPayment(booking, providerRef, rawResponse) {
   // Record/upsert the payment row.
   const { error: payErr } = await supabaseAdmin
@@ -34,26 +35,28 @@ async function confirmBookingPayment(booking, providerRef, rawResponse) {
     )
   if (payErr) throw payErr
 
-  // Only flip status + notify if not already confirmed (idempotency guard —
+  // Only flip status + notify if not already completed (idempotency guard —
   // the webhook and the verify endpoint can both fire for one payment).
-  const firstConfirmation = booking.status !== 'confirmed'
+  const firstConfirmation = booking.status !== 'completed'
   if (firstConfirmation) {
     const { error } = await supabaseAdmin
       .from('bookings')
-      .update({ status: 'confirmed', payment_status: 'success' })
+      .update({ status: 'completed', payment_status: 'success' })
       .eq('id', booking.id)
     if (error) throw error
   }
   logger.info('payment.confirmed', { bookingId: booking.id, reference: providerRef })
 
   if (firstConfirmation) {
+    // A promo code counts as "used" only once the booking is actually paid.
+    if (booking.discount_code) await incrementPromoUsage(booking.discount_code)
     await notifyGuest(booking.id, providerRef)
   }
 }
 
-// Loads the confirmed booking with property details and emails the guest a
+// Loads the completed booking with property details and emails the guest a
 // PDF receipt via the Apps Script notifier. Failures are logged, not thrown —
-// a booking must stay confirmed even if email delivery hiccups.
+// a booking must stay completed even if email delivery hiccups.
 async function notifyGuest(bookingId, providerRef) {
   try {
     const { data: full, error } = await supabaseAdmin
@@ -90,7 +93,7 @@ export const initializePayment = asyncHandler(async (req, res) => {
     .maybeSingle()
   if (error) throw error
   if (!booking) throw httpError(404, 'Booking not found.')
-  if (booking.status === 'confirmed') throw httpError(409, 'Booking is already paid.')
+  if (booking.status === 'completed') throw httpError(409, 'Booking is already paid.')
   if (booking.status === 'cancelled') throw httpError(409, 'Booking was cancelled.')
 
   // Re-check availability at payment time to guard against a race where the
@@ -203,8 +206,8 @@ export const getReceipt = asyncHandler(async (req, res) => {
     .maybeSingle()
   if (error) throw error
   if (!booking) throw httpError(404, 'Booking not found.')
-  if (booking.status !== 'confirmed') {
-    throw httpError(409, 'Receipt is only available for confirmed bookings.')
+  if (booking.status !== 'completed') {
+    throw httpError(409, 'Receipt is only available for completed bookings.')
   }
   res.json({ receipt: buildReceipt(booking) })
 })
@@ -224,6 +227,8 @@ function buildReceipt(booking) {
     charges: {
       subtotal: booking.subtotal,
       service_fee: booking.service_fee,
+      discount: Number(booking.discount_amount) || 0,
+      discount_code: booking.discount_code || null,
       total: booking.total_amount,
       currency: 'NGN',
     },

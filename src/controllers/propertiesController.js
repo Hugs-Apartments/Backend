@@ -76,12 +76,12 @@ export const updateProperty = asyncHandler(async (req, res) => {
 
 // DELETE /api/properties/:id — admin
 export const deleteProperty = asyncHandler(async (req, res) => {
-  // Guard: refuse if there are non-cancelled bookings referencing it.
+  // Guard: refuse if there are active (pending or completed) bookings.
   const { count, error: cErr } = await supabaseAdmin
     .from('bookings')
     .select('id', { count: 'exact', head: true })
     .eq('property_id', req.params.id)
-    .in('status', ['pending', 'confirmed'])
+    .in('status', ['pending', 'completed'])
   if (cErr) throw cErr
   if (count && count > 0) {
     throw httpError(409, 'Cannot delete: this property has active bookings. Deactivate it instead.')

@@ -49,3 +49,23 @@ export function sendBookingConfirmation({ receipt, payment }) {
 export function sendSubscribe({ email, name }) {
   return post('subscribe', { email, name: name ?? '' })
 }
+
+// Relays a contact-form enquiry. The Apps Script emails the business inbox and
+// sends the sender an acknowledgement copy.
+export function sendContactMessage({ name, email, phone, message }) {
+  return post('contact', {
+    business: config.business,
+    contact: { name, email, phone: phone ?? '', message },
+  })
+}
+
+// Sends a post-checkout thank-you + feedback request. `feedbackUrl` is the
+// public page where the guest can leave a rating and comment.
+export function sendFeedbackRequest({ name, email, reference, propertyName, feedbackUrl }) {
+  return post('feedback_request', {
+    business: config.business,
+    guest: { name: name ?? '', email },
+    booking: { reference: reference ?? '', property_name: propertyName ?? '' },
+    feedback_url: feedbackUrl ?? '',
+  })
+}

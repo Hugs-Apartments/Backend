@@ -12,8 +12,11 @@ import authRoutes from './routes/auth.js'
 import propertiesRoutes from './routes/properties.js'
 import bookingsRoutes from './routes/bookings.js'
 import paymentsRoutes from './routes/payments.js'
+import discountsRoutes from './routes/discounts.js'
+import feedbackRoutes from './routes/feedback.js'
 import statsRoutes from './routes/stats.js'
 import subscribeRoutes from './routes/subscribe.js'
+import contactRoutes from './routes/contact.js'
 import { paystackWebhook } from './controllers/paymentsController.js'
 
 const app = express()
@@ -56,8 +59,11 @@ app.use('/api/auth', authRoutes)
 app.use('/api/properties', propertiesRoutes)
 app.use('/api/bookings', bookingsRoutes)
 app.use('/api/payments', paymentsRoutes)
+app.use('/api/discounts', discountsRoutes)
+app.use('/api/feedback', feedbackRoutes)
 app.use('/api/stats', statsRoutes)
 app.use('/api/subscribe', subscribeRoutes)
+app.use('/api/contact', contactRoutes)
 
 // 404 + error handling.
 app.use(notFound)

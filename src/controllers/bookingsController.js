@@ -6,6 +6,7 @@ import { logger } from '../lib/logger.js'
 import { makeBookingRef } from '../utils/reference.js'
 import { validateDateRange, isRangeAvailable, nightsBetween } from '../utils/availability.js'
 import { getOccupiedRanges } from '../utils/occupancy.js'
+import { resolvePromo } from './discountsController.js'
 
 const createBookingSchema = z.object({
   property_id: z.string().uuid(),
@@ -16,6 +17,7 @@ const createBookingSchema = z.object({
   check_in: z.string(),
   check_out: z.string(),
   guests: z.number().int().positive(),
+  promo_code: z.string().optional(),
 })
 
 // POST /api/bookings — public. Creates a pending booking after validating
@@ -49,7 +51,19 @@ export const createBooking = asyncHandler(async (req, res) => {
   const nights = nightsBetween(input.check_in, input.check_out)
   const subtotal = Number(property.price_per_night) * nights
   const serviceFee = Math.round(subtotal * config.serviceFeeRate)
-  const total = subtotal + serviceFee
+
+  // Optional promo code — validated and priced server-side. An invalid code is
+  // rejected (rather than silently ignored) so the guest isn't misled.
+  let discountAmount = 0
+  let discountCode = null
+  if (input.promo_code) {
+    const promo = await resolvePromo(input.promo_code, { subtotal, nights })
+    if (!promo.ok) throw httpError(400, promo.error)
+    discountAmount = promo.discount
+    discountCode = promo.row.code
+  }
+
+  const total = Math.max(0, subtotal + serviceFee - discountAmount)
 
   const { data: booking, error } = await supabaseAdmin
     .from('bookings')
@@ -66,6 +80,8 @@ export const createBooking = asyncHandler(async (req, res) => {
       nights,
       subtotal,
       service_fee: serviceFee,
+      discount_code: discountCode,
+      discount_amount: discountAmount,
       total_amount: total,
       status: 'pending',
       payment_status: 'pending',
@@ -74,7 +90,7 @@ export const createBooking = asyncHandler(async (req, res) => {
     .single()
   if (error) throw error
 
-  logger.info('booking.created', { bookingId: booking.id, reference: booking.reference, total })
+  logger.info('booking.created', { bookingId: booking.id, reference: booking.reference, total, discountCode })
   res.status(201).json({ booking })
 })
 
@@ -121,10 +137,12 @@ export const listBookings = asyncHandler(async (req, res) => {
 })
 
 const statusSchema = z.object({
-  status: z.enum(['pending', 'confirmed', 'cancelled', 'completed']),
+  status: z.enum(['pending', 'completed', 'cancelled']),
 })
 
-// PATCH /api/bookings/:id/status — admin. Manual confirm/cancel/complete.
+// PATCH /api/bookings/:id/status — admin. In practice the admin only ever
+// cancels (at the guest's request); payment success is what marks a booking
+// "completed". The full set is still accepted for completeness.
 export const updateBookingStatus = asyncHandler(async (req, res) => {
   const { status } = statusSchema.parse(req.body)
 
@@ -138,7 +156,7 @@ export const updateBookingStatus = asyncHandler(async (req, res) => {
   if (!data) throw httpError(404, 'Booking not found.')
 
   // Cancelling a booking releases its dates automatically, because
-  // getOccupiedRanges only counts pending/confirmed bookings.
+  // getOccupiedRanges only counts completed (paid) bookings + admin blocks.
   logger.info('booking.status_changed', { bookingId: data.id, status, by: req.admin?.sub })
   res.json({ booking: data })
 })

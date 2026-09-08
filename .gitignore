@@ -7,3 +7,7 @@ npm-debug.log*
 dist/
 coverage/
 .env.example
+
+# SQL migrations and Google Apps Script (kept out of version control)
+*.sql
+*.gs
