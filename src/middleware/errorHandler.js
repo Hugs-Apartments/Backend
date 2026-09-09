@@ -21,6 +21,16 @@ export function errorHandler(err, req, res, next) {
     return res.status(403).json({ error: 'Origin not allowed.' })
   }
 
+  // Multer upload errors (file too large, unexpected field, etc.) -> 400 with a
+  // friendly message instead of a 500. The oversize case is the common one.
+  if (err?.name === 'MulterError') {
+    const message =
+      err.code === 'LIMIT_FILE_SIZE'
+        ? 'Image too large (max 8MB).'
+        : `Upload failed: ${err.message}`
+    return res.status(400).json({ error: message })
+  }
+
   const status = err.status || 500
   logger.error('unhandled_error', { message: err.message, status, stack: err.stack })
 

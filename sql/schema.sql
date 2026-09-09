@@ -44,6 +44,7 @@ create table if not exists properties (
   images          text[] not null default '{}',
   location        text not null default 'Maryland, Lagos',
   area            text,
+  map_url         text,
   rating          numeric(2,1) not null default 5.0,
   review_count    int not null default 0,
   is_active       boolean not null default true,

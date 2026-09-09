@@ -34,6 +34,19 @@ export const config = {
     callbackUrl: process.env.PAYSTACK_CALLBACK_URL ?? '',
   },
 
+  // Cloudinary — server-side image hosting for listing photos. The secret must
+  // never reach the browser, so the Admin uploads via the backend, which pushes
+  // to Cloudinary and returns the hosted URL. `enabled` lets the upload route
+  // fail clearly (503) when credentials are missing rather than erroring deep.
+  cloudinary: {
+    cloudName: process.env.CLOUDINARY_CLOUD_NAME ?? '',
+    apiKey: process.env.CLOUDINARY_API_KEY ?? '',
+    apiSecret: process.env.CLOUDINARY_API_SECRET ?? '',
+    get enabled() {
+      return Boolean(this.cloudName && this.apiKey && this.apiSecret)
+    },
+  },
+
   // Google Apps Script web app used to send booking emails (with a PDF
   // receipt) and to record newsletter subscribers. The token is a shared
   // secret checked on the Apps Script side.

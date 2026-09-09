@@ -10,6 +10,7 @@ import { notFound, errorHandler } from './middleware/errorHandler.js'
 
 import authRoutes from './routes/auth.js'
 import propertiesRoutes from './routes/properties.js'
+import uploadsRoutes from './routes/uploads.js'
 import bookingsRoutes from './routes/bookings.js'
 import paymentsRoutes from './routes/payments.js'
 import discountsRoutes from './routes/discounts.js'
@@ -57,6 +58,7 @@ app.use('/api', apiLimiter)
 // Routes.
 app.use('/api/auth', authRoutes)
 app.use('/api/properties', propertiesRoutes)
+app.use('/api/uploads', uploadsRoutes)
 app.use('/api/bookings', bookingsRoutes)
 app.use('/api/payments', paymentsRoutes)
 app.use('/api/discounts', discountsRoutes)

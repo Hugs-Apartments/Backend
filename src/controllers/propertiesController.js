@@ -13,6 +13,9 @@ const propertySchema = z.object({
   images: z.array(z.string()).default([]),
   location: z.string().default('Maryland, Lagos'),
   area: z.string().optional(),
+  // Optional map link for the listing (a Google Maps share/embed URL, an
+  // address, or "lat,lng"). Empty/omitted means no map is shown on the site.
+  map_url: z.string().trim().nullish(),
   rating: z.number().min(0).max(5).optional(),
   review_count: z.number().int().nonnegative().optional(),
   is_active: z.boolean().default(true),
