@@ -18,14 +18,42 @@ on:
   # Allows a manual run from the Actions tab to test it.
   workflow_dispatch:
 
+env:
+  # Change this if the backend host ever changes.
+  BASE_URL: https://backend-o6au.onrender.com
+
 jobs:
   ping:
     runs-on: ubuntu-latest
     steps:
-      - name: Ping backend keep-alive
+      - name: Ping backend to keep it awake
         run: |
+          set -u
           echo "Pinging backend at $(date -u)"
-          curl -fsS --max-time 60 --retry 3 --retry-delay 10 \
-            https://backend-o6au.onrender.com/api/keep-alive \
-            && echo "\nPing OK" \
-            || (echo "Ping failed" && exit 1)
+
+          # Waking the service is the whole point, so ANY HTTP response counts
+          # as success. We only fail if the server is completely unreachable
+          # (curl connection error). Render cold starts can take ~30-60s, so we
+          # allow a long timeout and retry.
+          #
+          # Prefer /api/keep-alive (also warms the DB); fall back to /health if
+          # that route isn't deployed yet. -w prints the final HTTP code; we do
+          # NOT use -f, so a 404/500 does not fail the job.
+          code=$(curl -sS -o /dev/null -w '%{http_code}' \
+            --max-time 90 --retry 4 --retry-delay 15 --retry-connrefused \
+            "$BASE_URL/api/keep-alive" || echo "000")
+          echo "keep-alive -> HTTP $code"
+
+          if [ "$code" = "404" ] || [ "$code" = "000" ]; then
+            echo "Falling back to /health ..."
+            code=$(curl -sS -o /dev/null -w '%{http_code}' \
+              --max-time 90 --retry 4 --retry-delay 15 --retry-connrefused \
+              "$BASE_URL/health" || echo "000")
+            echo "health -> HTTP $code"
+          fi
+
+          if [ "$code" = "000" ]; then
+            echo "Backend unreachable — no HTTP response."
+            exit 1
+          fi
+          echo "Backend is awake (HTTP $code)."
