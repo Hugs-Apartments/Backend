@@ -57,7 +57,10 @@ export const config = {
 
   business: {
     name: process.env.BUSINESS_NAME ?? 'Hugs Luxury Apartments',
-    email: process.env.BUSINESS_EMAIL ?? 'stay@hugsapartments.ng',
+    // General / contact inbox.
+    email: process.env.BUSINESS_EMAIL ?? 'info@hugsluxuryapartments.com',
+    // Bookings inbox — BCC'd on booking confirmations.
+    bookingsEmail: process.env.BUSINESS_BOOKINGS_EMAIL ?? 'bookings@hugsluxuryapartments.com',
     whatsapp: process.env.BUSINESS_WHATSAPP ?? '+234 909 215 7050',
     phone: process.env.BUSINESS_PHONE ?? '+234 909 215 7050',
     address: process.env.BUSINESS_ADDRESS ?? 'No. 45 Dokun Ogundipe Crescent, Maryland, Ikeja, Lagos, Nigeria',

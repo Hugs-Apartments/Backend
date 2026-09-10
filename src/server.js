@@ -4,6 +4,7 @@ import morgan from 'morgan'
 
 import { config } from './config.js'
 import { logger } from './lib/logger.js'
+import { supabaseAdmin } from './lib/supabaseAdmin.js'
 import { corsMiddleware } from './middleware/cors.js'
 import { apiLimiter } from './middleware/rateLimiter.js'
 import { notFound, errorHandler } from './middleware/errorHandler.js'
@@ -49,8 +50,26 @@ app.post(
 // --- Normal JSON parsing for everything else. ---
 app.use(express.json({ limit: '1mb' }))
 
-// Health check.
+// Health check. Instant, no DB — for load balancers / quick liveness probes.
 app.get('/health', (_req, res) => res.json({ status: 'ok', env: config.env }))
+
+// Keep-alive probe for free hosting (e.g. Render free tier, which sleeps after
+// ~15 min idle). An EXTERNAL scheduler must hit this every ~10 min — a timer
+// inside this process can't wake a sleeping instance. It runs one tiny DB read
+// so both the web service and the Supabase connection stay warm. Never throws:
+// even if the DB check fails, it returns 200 so the ping still keeps the app up.
+app.get('/api/keep-alive', async (_req, res) => {
+  let db = 'ok'
+  try {
+    const { error } = await supabaseAdmin
+      .from('properties')
+      .select('id', { count: 'exact', head: true })
+    if (error) db = 'error'
+  } catch {
+    db = 'error'
+  }
+  res.json({ status: 'ok', db, time: new Date().toISOString() })
+})
 
 // Rate-limit the API surface.
 app.use('/api', apiLimiter)

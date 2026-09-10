@@ -93,7 +93,9 @@ function handleBookingConfirmed(body, cfg) {
     name: business.name,
     attachments: [pdf],
   };
-  if (business.email) options.bcc = business.email;
+  // BCC the bookings inbox (falls back to the general inbox if unset).
+  var bookingsInbox = business.bookingsEmail || business.email;
+  if (bookingsInbox) options.bcc = bookingsInbox;
 
   MailApp.sendEmail(guest.email, subject, plainText(receipt, payment, business), options);
   return { ok: true };

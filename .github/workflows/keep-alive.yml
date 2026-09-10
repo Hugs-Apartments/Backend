@@ -1,0 +1,31 @@
+# Keeps the free Render backend awake by pinging it every ~10 minutes.
+#
+# Render's free tier sleeps a service after ~15 min with no inbound traffic;
+# the next request then waits ~30–60s for a cold start. This scheduled ping
+# hits /api/keep-alive (a tiny DB-touch endpoint) often enough that the
+# service never goes idle long enough to sleep.
+#
+# NOTE: GitHub's scheduled runs are best-effort and can be delayed 5–15 min
+# under load, so the interval is set tighter than 10 min to compensate. For a
+# hard guarantee, also add an external monitor (e.g. UptimeRobot / cron-job.org)
+# pointed at the same URL — see the repo notes.
+name: keep-alive
+
+on:
+  schedule:
+    # Every 7 minutes. Cron is UTC; the field order is min hour dom mon dow.
+    - cron: '*/7 * * * *'
+  # Allows a manual run from the Actions tab to test it.
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping backend keep-alive
+        run: |
+          echo "Pinging backend at $(date -u)"
+          curl -fsS --max-time 60 --retry 3 --retry-delay 10 \
+            https://backend-o6au.onrender.com/api/keep-alive \
+            && echo "\nPing OK" \
+            || (echo "Ping failed" && exit 1)
