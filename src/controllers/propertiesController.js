@@ -5,7 +5,10 @@ import { logger } from '../lib/logger.js'
 
 const propertySchema = z.object({
   name: z.string().min(1),
-  type: z.enum(['Studio', '1-Bedroom', '2-Bedroom', 'Penthouse']),
+  // Free-form apartment type (e.g. "Studio", "1-Bedroom", "3-Bedroom",
+  // "Duplex"). The admin types it in and past values are suggested back; the
+  // DB column is plain text, so any non-empty label is valid.
+  type: z.string().trim().min(1),
   description: z.string().default(''),
   price_per_night: z.number().nonnegative(),
   max_guests: z.number().int().positive(),

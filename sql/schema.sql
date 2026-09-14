@@ -6,9 +6,9 @@ create extension if not exists "pgcrypto";
 -- ---------------------------------------------------------------------------
 -- Enums
 -- ---------------------------------------------------------------------------
-do $$ begin
-  create type property_type as enum ('Studio', '1-Bedroom', '2-Bedroom', 'Penthouse');
-exception when duplicate_object then null; end $$;
+-- Note: properties.type is free-form text (any apartment type the admin types),
+-- not an enum. It used to be a `property_type` enum — migration
+-- 004_property_type_freeform.sql converts existing databases.
 
 do $$ begin
   create type booking_status as enum ('pending', 'confirmed', 'cancelled', 'completed');
@@ -36,7 +36,7 @@ create table if not exists admin_users (
 create table if not exists properties (
   id              uuid primary key default gen_random_uuid(),
   name            text not null,
-  type            property_type not null,
+  type            text not null,
   description     text not null default '',
   price_per_night numeric(12,2) not null check (price_per_night >= 0),
   max_guests      int not null default 1 check (max_guests > 0),
